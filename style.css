@@ -44,6 +44,21 @@ header { padding: 1.25rem 0 0.5rem; }
 h1 { font-size: 1.35rem; margin: 0; }
 .tagline { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
 
+/* Always-visible reminder, on every tab. The dismissible banner above can be
+   waved away and then forgotten; this cannot, because losing a month of
+   entries to a browser clearing its storage is not a small annoyance.
+   Hidden once the app is actually installed, when it no longer applies. */
+.homescreen-note {
+  margin: 1.5rem 0 2.5rem;
+  padding: 0.7rem 0.8rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.homescreen-note strong { color: var(--text); }
+
 /* -- install hint -------------------------------------------------- */
 
 .install-hint {

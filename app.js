@@ -940,6 +940,12 @@ function maybeShowIosHint() {
 
 maybeShowIosHint();
 
+// Once the app is installed the footer reminder is just noise, and the advice
+// no longer applies — the data is already protected from eviction.
+if (isInstalled()) {
+  document.getElementById('homescreen-note').hidden = true;
+}
+
 // Asks the browser to treat this data as worth keeping. Chrome and Firefox
 // honour it; Safari largely grants it to installed apps. It is a request, not
 // a guarantee — which is why Save backup exists.
