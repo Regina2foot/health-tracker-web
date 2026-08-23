@@ -1,0 +1,330 @@
+/* Health Tracker — light web version.
+   Mobile first: this is opened on phones far more than on desktops. */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --text: #16181d;
+  --muted: #6b7280;
+  --border: #d7dae0;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --danger: #b91c1c;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --surface: #1d2026;
+    --text: #e8eaed;
+    --muted: #9aa1ac;
+    --border: #333842;
+    --accent: #4d84f3;
+    --accent-text: #0b0d10;
+    --danger: #f87171;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 1rem env(safe-area-inset-bottom) 1rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  max-width: 720px;
+  margin-inline: auto;
+  /* Stop iOS bumping font sizes when the phone is turned sideways. */
+  -webkit-text-size-adjust: 100%;
+}
+
+header { padding: 1.25rem 0 0.5rem; }
+h1 { font-size: 1.35rem; margin: 0; }
+.tagline { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+/* -- install hint -------------------------------------------------- */
+
+.install-hint {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.install-hint p { margin: 0 0 0.6rem; font-size: 0.85rem; line-height: 1.45; }
+.install-actions { display: flex; gap: 0.5rem; }
+
+/* -- tabs ---------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 1rem 0 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  flex: 1;
+  padding: 0.6rem 0.5rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.tab.is-active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+
+.view { display: none; }
+.view.is-active { display: block; }
+
+.placeholder { color: var(--muted); }
+
+/* -- date bar ------------------------------------------------------ */
+
+.datebar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.datebar input[type="date"] {
+  flex: 1;
+  min-width: 8.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.iconbtn {
+  /* 44px is the smallest reliably tappable target on a phone. */
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.iconbtn:disabled { opacity: 0.35; cursor: default; }
+
+.textbtn {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.day-label { margin: 0.9rem 0 0.1rem; font-size: 1.05rem; font-weight: 600; }
+.status { margin: 0 0 1.1rem; color: var(--muted); font-size: 0.85rem; }
+
+/* -- form ---------------------------------------------------------- */
+
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 1.4rem;
+}
+
+legend { padding: 0; margin-bottom: 0.45rem; font-weight: 600; font-size: 0.95rem; }
+
+/* 11 columns: "—" for no answer, then 1..10. On a narrow phone these
+   shrink rather than wrapping, so the scale always reads as one row. */
+.scale {
+  display: grid;
+  grid-template-columns: 1.3fr repeat(10, 1fr);
+  gap: 3px;
+}
+
+.scale button {
+  padding: 0.55rem 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.scale button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.sleep-row { display: flex; align-items: center; gap: 0.5rem; }
+
+.sleep-row input {
+  width: 6rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.unit { color: var(--muted); font-size: 0.9rem; margin-right: auto; }
+
+textarea {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 2rem;
+}
+
+.primary {
+  padding: 0.75rem 1.6rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.feedback { color: var(--muted); font-size: 0.85rem; }
+.feedback.is-error { color: var(--danger); }
+
+/* -- history ------------------------------------------------------- */
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.9rem; }
+
+.notice {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.notice strong { color: var(--text); }
+
+.history { list-style: none; margin: 0; padding: 0 0 2rem; }
+
+.history-item {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.3rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-open:hover { background: var(--surface); }
+
+.history-date { font-weight: 600; font-size: 0.95rem; }
+.history-summary { color: var(--muted); font-size: 0.85rem; }
+
+.history-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+  /* Long notes get one line here; the full text is on the Today tab. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -- trends -------------------------------------------------------- */
+
+.chip {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  min-height: 38px;
+  cursor: pointer;
+}
+
+.chip.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.trends-summary {
+  margin: 0.4rem 0 0.8rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.chart-holder { width: 100%; padding-bottom: 2rem; }
+
+.grid { stroke: var(--border); stroke-width: 1; opacity: 0.45; }
+.axis { stroke: var(--muted); stroke-width: 1; }
+.tick { fill: var(--muted); font-size: 10px; }
+.legend { font-size: 11px; font-weight: 600; }
+
+.history-delete {
+  align-self: center;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-size: 0.85rem;
+  min-height: 44px;
+  cursor: pointer;
+}

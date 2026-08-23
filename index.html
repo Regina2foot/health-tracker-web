@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Log how you feel each day. Everything stays on your device.">
+<title>Health Tracker</title>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563eb">
+<!-- iOS ignores the manifest icons when adding to the Home Screen. -->
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Health">
+<!-- ?v= is bumped when these files change, so a cached copy can never win.
+     Needed once deployed too, where caching is on by design. -->
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+
+<header>
+  <h1>Health Tracker</h1>
+  <p class="tagline">Everything stays on this device.</p>
+</header>
+
+<div id="install-hint" class="install-hint" hidden>
+  <p id="install-text"></p>
+  <div class="install-actions">
+    <button type="button" id="install-btn" class="textbtn" hidden>Install</button>
+    <button type="button" id="install-dismiss" class="textbtn">Got it</button>
+  </div>
+</div>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" class="tab is-active" data-view="today" aria-selected="true">Today</button>
+  <button role="tab" class="tab" data-view="history" aria-selected="false">History</button>
+  <button role="tab" class="tab" data-view="trends" aria-selected="false">Trends</button>
+</nav>
+
+<main>
+
+  <section id="view-today" class="view is-active">
+
+    <div class="datebar">
+      <button id="prev-day" class="iconbtn" aria-label="Previous day">&larr;</button>
+      <input type="date" id="date-input" aria-label="Date">
+      <button id="next-day" class="iconbtn" aria-label="Next day">&rarr;</button>
+      <button id="today-btn" class="textbtn">Today</button>
+    </div>
+
+    <p id="day-label" class="day-label"></p>
+    <p id="day-status" class="status"></p>
+
+    <form id="entry-form" novalidate>
+
+      <fieldset class="scale-field">
+        <legend>Mood</legend>
+        <div class="scale" data-field="mood"></div>
+        <div class="ends"><span>1 = awful</span><span>10 = great</span></div>
+      </fieldset>
+
+      <fieldset class="scale-field">
+        <legend>Energy</legend>
+        <div class="scale" data-field="energy"></div>
+        <div class="ends"><span>1 = drained</span><span>10 = full of energy</span></div>
+      </fieldset>
+
+      <fieldset class="sleep-field">
+        <legend>Sleep</legend>
+        <div class="sleep-row">
+          <input type="number" id="sleep-input" min="0" max="24" step="0.5"
+                 inputmode="decimal" placeholder="—">
+          <span class="unit">hours</span>
+          <button type="button" id="sleep-clear" class="textbtn">No answer</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Notes</legend>
+        <textarea id="note-input" rows="4"
+                  placeholder="Anything worth remembering about today"></textarea>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit" id="save-btn" class="primary">Save</button>
+        <span id="save-feedback" class="feedback" role="status" aria-live="polite"></span>
+      </div>
+
+    </form>
+  </section>
+
+  <section id="view-history" class="view">
+
+    <div class="toolbar">
+      <button type="button" id="export-json" class="textbtn">Save backup</button>
+      <button type="button" id="import-json" class="textbtn">Restore backup</button>
+      <button type="button" id="export-csv" class="textbtn">Export CSV</button>
+      <input type="file" id="import-file" accept="application/json,.json" hidden>
+    </div>
+
+    <p class="notice">
+      Your entries live only in this browser. Clearing website data erases
+      them, and iPhones may do so on their own if you go a week without
+      opening the app — adding it to your Home Screen prevents that.
+      <strong>Save a backup now and then.</strong>
+    </p>
+
+    <p id="import-feedback" class="feedback" role="status" aria-live="polite"></p>
+
+    <ul id="history-list" class="history"></ul>
+  </section>
+
+  <section id="view-trends" class="view">
+
+    <div class="toolbar" id="range-buttons">
+      <button type="button" class="chip" data-days="7">7 days</button>
+      <button type="button" class="chip is-on" data-days="30">30 days</button>
+      <button type="button" class="chip" data-days="90">90 days</button>
+      <button type="button" class="chip" data-days="365">1 year</button>
+      <button type="button" class="chip" data-days="all">All</button>
+    </div>
+
+    <div class="toolbar" id="series-buttons">
+      <button type="button" class="chip is-on" data-series="mood">Mood</button>
+      <button type="button" class="chip is-on" data-series="energy">Energy</button>
+      <button type="button" class="chip is-on" data-series="sleep_hours">Sleep</button>
+    </div>
+
+    <p id="trends-summary" class="trends-summary"></p>
+    <div id="chart-holder" class="chart-holder"></div>
+    <p id="trends-empty" class="placeholder"></p>
+  </section>
+
+</main>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>
