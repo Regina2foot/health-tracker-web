@@ -14,9 +14,13 @@ place exists.
 Open the link on a phone or computer. Nothing to install.
 
 **On a phone, add it to your Home Screen.** This matters more than it sounds:
-iOS clears the stored data of websites left unopened for about a week, and an
-installed app is exempt. On iPhone tap Share → *Add to Home Screen*; on Android
-your browser will offer to install it.
+iOS clears the stored data of websites left unopened for about a week, and a
+Home Screen app is exempt. On iPhone tap Share → *Add to Home Screen*; on
+Android your browser will offer to add it for you.
+
+Nothing is installed on your device by doing this — despite what some browsers
+call it. The app stays an ordinary web page; the shortcut changes only how you
+open it and how long your entries are kept.
 
 **Save a backup now and then**, from the History tab. Browser storage is
 convenient but not durable — clearing website data erases it, and so does

@@ -907,8 +907,12 @@ window.addEventListener('beforeinstallprompt', (event) => {
   footerInstallBtn.hidden = false;
 
   if (!hintWasDismissed()) {
-    installText.textContent = 'Install this app to keep your entries safe and '
-      + 'open it without a connection.';
+    // Deliberately avoids the word "install": nothing is installed on the
+    // device. Chrome labels its own dialog that way, but the honest
+    // description is a shortcut plus storage that stops being cleared.
+    installText.textContent = 'Add this to your Home Screen so your entries '
+      + 'stop being at risk of the browser clearing them. It stays a web '
+      + 'page — nothing is installed on your phone.';
     installBtn.hidden = false;
     installHint.hidden = false;
   }

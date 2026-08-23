@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Health">
 <!-- ?v= is bumped when these files change, so a cached copy can never win.
      Needed once deployed too, where caching is on by design. -->
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -35,7 +35,7 @@
 <div id="install-hint" class="install-hint" hidden>
   <p id="install-text"></p>
   <div class="install-actions">
-    <button type="button" id="install-btn" class="textbtn" hidden>Install</button>
+    <button type="button" id="install-btn" class="textbtn" hidden>Add to Home Screen</button>
     <button type="button" id="install-dismiss" class="textbtn">Got it</button>
   </div>
 </div>
@@ -146,16 +146,22 @@
   <p>
     <strong>Add this to your Home Screen.</strong>
     On iPhone: tap Share, then “Add to Home Screen”. On Android: your browser’s
-    menu, then “Install app”. It opens like a normal app afterwards — and your
-    entries stop being at risk of the browser clearing them.
+    menu — it may be labelled “Install app”, though nothing is installed on
+    your phone. You get an icon and your own window, and your entries stop
+    being at risk of the browser clearing them.
   </p>
-  <!-- Shown only where the browser supports a real install prompt, so
-       dismissing the banner never removes the ability to install. -->
+  <p class="fineprint">
+    Nothing is downloaded onto your device and nothing is granted access to
+    it. This stays an ordinary web page in your browser — the shortcut only
+    changes how you open it and how long your entries are kept.
+  </p>
+  <!-- Shown only where the browser offers to add the shortcut for you, so
+       dismissing the banner never removes the shorter route. -->
   <button type="button" id="footer-install-btn" class="textbtn" hidden>
-    Install this app
+    Add to Home Screen
   </button>
 </footer>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
