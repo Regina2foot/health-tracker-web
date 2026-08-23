@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Health">
 <!-- ?v= is bumped when these files change, so a cached copy can never win.
      Needed once deployed too, where caching is on by design. -->
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -143,12 +143,19 @@
 </main>
 
 <footer id="homescreen-note" class="homescreen-note">
-  <strong>Add this to your Home Screen.</strong>
-  On iPhone: tap Share, then “Add to Home Screen”. On Android: your browser’s
-  menu, then “Install app”. It opens like a normal app afterwards — and your
-  entries stop being at risk of the browser clearing them.
+  <p>
+    <strong>Add this to your Home Screen.</strong>
+    On iPhone: tap Share, then “Add to Home Screen”. On Android: your browser’s
+    menu, then “Install app”. It opens like a normal app afterwards — and your
+    entries stop being at risk of the browser clearing them.
+  </p>
+  <!-- Shown only where the browser supports a real install prompt, so
+       dismissing the banner never removes the ability to install. -->
+  <button type="button" id="footer-install-btn" class="textbtn" hidden>
+    Install this app
+  </button>
 </footer>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

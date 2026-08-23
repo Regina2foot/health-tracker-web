@@ -57,7 +57,9 @@ h1 { font-size: 1.35rem; margin: 0; }
   line-height: 1.5;
 }
 
+.homescreen-note p { margin: 0; }
 .homescreen-note strong { color: var(--text); }
+.homescreen-note button { margin-top: 0.6rem; }
 
 /* -- install hint -------------------------------------------------- */
 

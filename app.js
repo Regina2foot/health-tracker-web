@@ -890,14 +890,23 @@ function hintWasDismissed() {
   }
 }
 
+const footerNote = document.getElementById('homescreen-note');
+const footerInstallBtn = document.getElementById('footer-install-btn');
+
 let deferredInstall = null;
 
 // Chrome and Edge fire this when the app qualifies for installation, and let
-// the page trigger the real prompt later.
+// the page trigger the real prompt later. Safari never fires it.
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault();
   deferredInstall = event;
-  if (!isInstalled() && !hintWasDismissed()) {
+  if (isInstalled()) return;
+
+  // The footer button appears whether or not the banner was dismissed:
+  // waving away the reminder should not cost someone the ability to install.
+  footerInstallBtn.hidden = false;
+
+  if (!hintWasDismissed()) {
     installText.textContent = 'Install this app to keep your entries safe and '
       + 'open it without a connection.';
     installBtn.hidden = false;
@@ -905,12 +914,26 @@ window.addEventListener('beforeinstallprompt', (event) => {
   }
 });
 
-installBtn.addEventListener('click', async () => {
+async function runInstall() {
   if (!deferredInstall) return;
   deferredInstall.prompt();
-  await deferredInstall.userChoice;
+  const { outcome } = await deferredInstall.userChoice;
+  // The event can only be used once. If they declined, the browser will fire
+  // a fresh one later; until then there is nothing to offer.
   deferredInstall = null;
   installHint.hidden = true;
+  footerInstallBtn.hidden = true;
+  if (outcome === 'accepted') footerNote.hidden = true;
+}
+
+installBtn.addEventListener('click', runInstall);
+footerInstallBtn.addEventListener('click', runInstall);
+
+// Fires after an install completes by any route, including the browser's own
+// menu rather than our button.
+window.addEventListener('appinstalled', () => {
+  installHint.hidden = true;
+  footerNote.hidden = true;
 });
 
 document.getElementById('install-dismiss').addEventListener('click', () => {
@@ -943,7 +966,7 @@ maybeShowIosHint();
 // Once the app is installed the footer reminder is just noise, and the advice
 // no longer applies — the data is already protected from eviction.
 if (isInstalled()) {
-  document.getElementById('homescreen-note').hidden = true;
+  footerNote.hidden = true;
 }
 
 // Asks the browser to treat this data as worth keeping. Chrome and Firefox
