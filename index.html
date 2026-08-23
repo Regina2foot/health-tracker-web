@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="Log how you feel each day. Everything stays on your device.">
+
+<!-- The app makes no external requests by design; this makes the browser
+     enforce that rather than trusting the code to stay that way. If anyone
+     ever adds a CDN script or an analytics tag it is blocked outright rather
+     than quietly shipping people's health data somewhere.
+     Declared here rather than as an HTTP header because GitHub Pages cannot
+     send custom headers. `_headers` covers hosts that can. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'">
 <title>Health Tracker</title>
 
 <link rel="manifest" href="manifest.webmanifest">

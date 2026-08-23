@@ -1,0 +1,31 @@
+# HTTP headers for the deployed site.
+#
+# Read by Netlify and Cloudflare Pages. GitHub Pages, where this is currently
+# hosted, cannot send custom headers and ignores this file entirely — which is
+# why the Content-Security-Policy is also declared as a <meta> tag in
+# index.html, where it applies everywhere. This file is kept so the stricter
+# headers below take effect if the site ever moves to a host that supports
+# them: a meta tag cannot express frame-ancestors or X-Content-Type-Options.
+
+/*
+  # The app makes no external requests by design. This makes the browser
+  # enforce that rather than trusting the code to stay that way: if anyone
+  # ever adds a CDN script or an analytics tag, it is blocked outright
+  # instead of quietly shipping other people's health data somewhere.
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), interest-cohort=()
+
+# The service worker decides which version of the app everyone runs. If it
+# were cached, a stale copy could pin people to an old version indefinitely.
+/sw.js
+  Cache-Control: no-cache
+
+# index.html carries the ?v= markers that point at the current CSS and JS,
+# so it must always be fetched fresh for an update to be noticed.
+/index.html
+  Cache-Control: no-cache
+
+/
+  Cache-Control: no-cache
