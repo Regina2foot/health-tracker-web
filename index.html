@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Health">
 <!-- ?v= is bumped when these files change, so a cached copy can never win.
      Needed once deployed too, where caching is on by design. -->
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -155,12 +155,14 @@
     </div>
 
     <div class="toolbar" id="smoothing-buttons">
-      <span class="toolbar-label">Show</span>
-      <button type="button" class="chip is-on" data-smooth="0">Every entry</button>
-      <button type="button" class="chip" data-smooth="7">7-day mean</button>
-      <button type="button" class="chip" data-smooth="30">30-day mean</button>
-      <button type="button" class="chip" data-smooth="90">90-day mean</button>
-      <button type="button" class="chip" data-smooth="365">1-year mean</button>
+      <span class="toolbar-label">Moving mean, days</span>
+      <button type="button" class="chip is-on" data-smooth="0"
+              aria-label="No averaging, show every entry">off</button>
+      <button type="button" class="chip" data-smooth="1" aria-label="1 day mean">1</button>
+      <button type="button" class="chip" data-smooth="7" aria-label="7 day mean">7</button>
+      <button type="button" class="chip" data-smooth="30" aria-label="30 day mean">30</button>
+      <button type="button" class="chip" data-smooth="90" aria-label="90 day mean">90</button>
+      <button type="button" class="chip" data-smooth="365" aria-label="365 day mean">365</button>
     </div>
 
     <p id="trends-summary" class="trends-summary"></p>
@@ -191,6 +193,6 @@
   </button>
 </footer>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

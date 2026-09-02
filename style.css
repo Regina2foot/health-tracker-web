@@ -245,7 +245,7 @@ textarea {
 
 /* -- history ------------------------------------------------------- */
 
-.toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.9rem; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
 
 .notice {
   margin: 0 0 1rem;
@@ -302,14 +302,17 @@ textarea {
 /* -- trends -------------------------------------------------------- */
 
 .chip {
-  padding: 0.45rem 0.75rem;
+  /* Compact on purpose: three rows of these sit above the chart, and on a
+     phone they have to fit without wrapping into a wall of buttons. Still
+     tall enough to hit reliably with a thumb. */
+  padding: 0.3rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
   font: inherit;
-  font-size: 0.85rem;
-  min-height: 38px;
+  font-size: 0.8rem;
+  min-height: 32px;
   cursor: pointer;
 }
 
@@ -383,3 +386,5 @@ textarea {
   font-size: 0.8rem;
   margin-right: 0.15rem;
 }
+
+#smoothing-buttons .chip { min-width: 2.6rem; padding-inline: 0.45rem; }

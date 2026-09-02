@@ -9,13 +9,13 @@
  * indefinitely.
  */
 
-const CACHE_NAME = 'health-tracker-v7';
+const CACHE_NAME = 'health-tracker-v8';
 
 const SHELL = [
   './',
   './index.html',
-  './style.css?v=7',
-  './app.js?v=7',
+  './style.css?v=8',
+  './app.js?v=8',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
