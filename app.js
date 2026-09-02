@@ -23,18 +23,37 @@ const STORAGE_KEY = 'health-tracker.entries.v1';
  * Safari private browsing, storage disabled by policy — so every access is
  * guarded. A failure must degrade to "nothing saved yet", never a blank page. */
 
-function loadAll() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-  } catch (err) {
-    console.warn('Could not read saved entries:', err);
-    return {};
-  }
+/* Shape on disk:
+ *
+ *   { version: 2,
+ *     entries: [ { id, at: "2026-08-24T14:30", mood, energy, note } ],
+ *     days:    { "2026-08-24": { sleep_hours: 7.5 } } }
+ *
+ * Mood and energy are moments — several a day is normal and the times
+ * matter. Sleep describes a night, so it belongs to the day rather than to
+ * any one moment, and lives separately instead of being repeated on every
+ * entry and averaged into nonsense. */
+
+function blankStore() {
+  return { version: 2, entries: [], days: {} };
 }
 
-function saveAll(entries) {
+function loadStore() {
+  let raw;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
+  } catch (err) {
+    console.warn('Could not read saved entries:', err);
+    return blankStore();
+  }
+  if (!raw) return blankStore();
+  if (Array.isArray(raw.entries)) return raw;          // already version 2
+  return migrateFromDateKeyed(raw);                    // version 1
+}
+
+function saveStore(store) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
     return true;
   } catch (err) {
     console.warn('Could not save entries:', err);
@@ -42,36 +61,108 @@ function saveAll(entries) {
   }
 }
 
-function getEntry(isoDate) {
-  return loadAll()[isoDate] || null;
+/* Version 1 kept exactly one record per day, keyed by date. Everyone using
+ * the app already has data in that shape, including on phones this code will
+ * never see, so the conversion has to be lossless and has to run on the way
+ * in rather than as a one-off. */
+function migrateFromDateKeyed(byDate) {
+  const store = blankStore();
+
+  for (const [date, old] of Object.entries(byDate)) {
+    if (!old || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+    store.entries.push({
+      id: newId(),
+      // created_at holds when it was actually logged. Use that time when it
+      // belongs to the same local day, otherwise midday — arbitrary, but it
+      // can never land the entry on the wrong date the way a timezone
+      // conversion can.
+      at: sameDayLocalTime(old.created_at, date) || `${date}T12:00`,
+      mood: old.mood ?? null,
+      energy: old.energy ?? null,
+      // Stress was retired from the interface but recorded values are kept,
+      // so the decision stays reversible.
+      stress: old.stress ?? null,
+      note: typeof old.note === 'string' ? old.note : '',
+    });
+
+    if (old.sleep_hours != null) {
+      store.days[date] = { sleep_hours: old.sleep_hours };
+    }
+  }
+
+  store.entries.sort((a, b) => a.at.localeCompare(b.at));
+  return store;
 }
+
+function sameDayLocalTime(isoUtc, expectedDate) {
+  if (!isoUtc) return null;
+  const when = new Date(isoUtc);
+  if (Number.isNaN(when.getTime())) return null;
+  if (toIso(when) !== expectedDate) return null;
+  return `${expectedDate}T${clock(when)}`;
+}
+
+function newId() {
+  if (crypto && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/* -- reading ------------------------------------------------------- */
 
 function allEntriesNewestFirst() {
-  return Object.values(loadAll()).sort((a, b) => b.date.localeCompare(a.date));
+  return loadStore().entries.slice().sort((a, b) => b.at.localeCompare(a.at));
 }
 
-function removeEntry(isoDate) {
-  const entries = loadAll();
-  delete entries[isoDate];
-  return saveAll(entries);
+function allEntriesOldestFirst() {
+  return loadStore().entries.slice().sort((a, b) => a.at.localeCompare(b.at));
 }
 
-function upsertEntry(isoDate, values) {
-  const entries = loadAll();
-  const now = new Date().toISOString();
-  const existing = entries[isoDate];
+function entriesOn(isoDate) {
+  return loadStore().entries
+    .filter((e) => e.at.startsWith(isoDate))
+    .sort((a, b) => a.at.localeCompare(b.at));
+}
 
-  entries[isoDate] = {
-    date: isoDate,
-    mood: values.mood,
-    energy: values.energy,
-    stress: values.stress,
-    sleep_hours: values.sleep_hours,
-    note: values.note,
-    created_at: existing ? existing.created_at : now,
-    updated_at: now,
-  };
-  return saveAll(entries);
+function getEntryById(id) {
+  return loadStore().entries.find((e) => e.id === id) || null;
+}
+
+function sleepOn(isoDate) {
+  const day = loadStore().days[isoDate];
+  return day && day.sleep_hours != null ? day.sleep_hours : null;
+}
+
+function loggedDates() {
+  return [...new Set(loadStore().entries.map((e) => e.at.slice(0, 10)))].sort();
+}
+
+/* -- writing ------------------------------------------------------- */
+
+function saveEntry({ id, at, mood, energy, note }) {
+  const store = loadStore();
+  const existing = id ? store.entries.find((e) => e.id === id) : null;
+
+  if (existing) {
+    Object.assign(existing, { at, mood, energy, note });
+  } else {
+    id = newId();
+    store.entries.push({ id, at, mood, energy, stress: null, note });
+  }
+  return saveStore(store) ? id : null;
+}
+
+function setSleep(isoDate, hours) {
+  const store = loadStore();
+  if (hours == null) delete store.days[isoDate];
+  else store.days[isoDate] = { sleep_hours: hours };
+  return saveStore(store);
+}
+
+function removeEntry(id) {
+  const store = loadStore();
+  store.entries = store.entries.filter((e) => e.id !== id);
+  return saveStore(store);
 }
 
 /* ------------------------------------------------------------------ */
@@ -89,6 +180,27 @@ function toIso(dateObj) {
 
 function todayIso() {
   return toIso(new Date());
+}
+
+/* Local wall-clock, never UTC. An entry logged at 23:30 belongs to that
+ * evening, not to the next morning in Greenwich. */
+function clock(dateObj) {
+  const h = String(dateObj.getHours()).padStart(2, '0');
+  const m = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function nowStamp() {
+  const now = new Date();
+  return `${toIso(now)}T${clock(now)}`;
+}
+
+function dateOf(stamp) {
+  return stamp.slice(0, 10);
+}
+
+function timeOf(stamp) {
+  return stamp.slice(11, 16);
 }
 
 function shiftIso(isoDate, deltaDays) {
@@ -177,20 +289,27 @@ function setScale(field, value) {
 
 const el = {
   dateInput: document.getElementById('date-input'),
+  timeInput: document.getElementById('time-input'),
   prevDay: document.getElementById('prev-day'),
   nextDay: document.getElementById('next-day'),
-  todayBtn: document.getElementById('today-btn'),
+  nowBtn: document.getElementById('today-btn'),
   dayLabel: document.getElementById('day-label'),
   dayStatus: document.getElementById('day-status'),
+  dayEntries: document.getElementById('day-entries'),
   form: document.getElementById('entry-form'),
   sleep: document.getElementById('sleep-input'),
   sleepClear: document.getElementById('sleep-clear'),
   note: document.getElementById('note-input'),
   saveBtn: document.getElementById('save-btn'),
+  deleteBtn: document.getElementById('delete-btn'),
   feedback: document.getElementById('save-feedback'),
 };
 
-let currentDate = todayIso();
+/* The editor works on one entry at a time. `currentId` is null while writing
+ * a new one, so saving twice at different times creates two entries rather
+ * than overwriting the first — which is the whole point of timestamps. */
+let currentStamp = nowStamp();
+let currentId = null;
 let dirty = false;
 
 function markDirty() {
@@ -199,43 +318,96 @@ function markDirty() {
   el.feedback.classList.remove('is-error');
 }
 
-function loadDate(isoDate) {
-  currentDate = isoDate;
-  const entry = getEntry(isoDate);
+function loadEntry(stamp, id) {
+  currentStamp = stamp;
+  currentId = id || null;
+  const entry = currentId ? getEntryById(currentId) : null;
+  const date = dateOf(stamp);
 
-  el.dateInput.value = isoDate;
-  el.dayLabel.textContent = prettyDate(isoDate);
-  // Tomorrow cannot be rated, so there is nothing to step forward to.
-  el.nextDay.disabled = isoDate >= todayIso();
+  el.dateInput.value = date;
+  el.timeInput.value = timeOf(stamp);
+  el.dayLabel.textContent = prettyDate(date);
+  el.nextDay.disabled = date >= todayIso();
 
   setScale('mood', entry ? entry.mood : null);
   setScale('energy', entry ? entry.energy : null);
-  // `!= null` on purpose: catches undefined too, so an entry written by an
-  // older version without the field shows blank rather than "undefined".
-  el.sleep.value = entry && entry.sleep_hours != null ? entry.sleep_hours : '';
   el.note.value = entry ? entry.note || '' : '';
+
+  // Sleep belongs to the day, so it loads from the day whichever entry is open.
+  const hours = sleepOn(date);
+  el.sleep.value = hours == null ? '' : hours;
 
   el.dayStatus.textContent = entry
     ? 'Editing an entry you already saved.'
-    : 'Nothing saved for this day yet.';
+    : 'New entry. Saving adds it alongside any others that day.';
   el.saveBtn.textContent = entry ? 'Update' : 'Save';
+  el.deleteBtn.hidden = !entry;
   el.feedback.textContent = '';
   el.feedback.classList.remove('is-error');
   dirty = false;
+
+  renderDayEntries(date);
 }
 
-function goTo(isoDate) {
-  if (isoDate === currentDate) return;
+/* The day's other entries, so a second or third can be reached without a
+ * detour through History. */
+function renderDayEntries(date) {
+  const entries = entriesOn(date);
+  el.dayEntries.textContent = '';
+
+  if (!entries.length) { el.dayEntries.hidden = true; return; }
+  el.dayEntries.hidden = false;
+
+  const label = document.createElement('span');
+  label.className = 'day-entries-label';
+  label.textContent = entries.length === 1 ? 'This day:' : `This day (${entries.length}):`;
+  el.dayEntries.appendChild(label);
+
+  for (const entry of entries) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip time-chip' + (entry.id === currentId ? ' is-on' : '');
+    const bits = [timeOf(entry.at)];
+    if (entry.mood != null) bits.push(`M${entry.mood}`);
+    if (entry.energy != null) bits.push(`E${entry.energy}`);
+    chip.textContent = bits.join(' · ');
+    chip.addEventListener('click', () => {
+      if (!confirmLeave()) return;
+      loadEntry(entry.at, entry.id);
+    });
+    el.dayEntries.appendChild(chip);
+  }
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'chip time-chip' + (currentId ? '' : ' is-on');
+  add.textContent = '+ new';
+  add.addEventListener('click', () => {
+    if (!confirmLeave()) return;
+    const stamp = date === todayIso() ? nowStamp() : `${date}T12:00`;
+    loadEntry(stamp, null);
+  });
+  el.dayEntries.appendChild(add);
+}
+
+function confirmLeave() {
+  return !dirty || confirm('This entry has unsaved changes. Discard them?');
+}
+
+function goToDate(isoDate) {
   if (isoDate > todayIso()) {
-    showError('You can only log days up to today.');
-    el.dateInput.value = currentDate;
+    showError('You can only log up to today.');
+    el.dateInput.value = dateOf(currentStamp);
     return;
   }
-  if (dirty && !confirm('This day has unsaved changes. Discard them?')) {
-    el.dateInput.value = currentDate;
+  if (!confirmLeave()) {
+    el.dateInput.value = dateOf(currentStamp);
     return;
   }
-  loadDate(isoDate);
+  // Moving to another day opens a fresh entry rather than an existing one:
+  // picking which of that day's entries to edit is what the chips are for.
+  const stamp = isoDate === todayIso() ? nowStamp() : `${isoDate}T12:00`;
+  loadEntry(stamp, null);
 }
 
 function showError(message) {
@@ -252,47 +424,71 @@ function readSleep() {
   return hours;
 }
 
+function readStamp() {
+  const date = el.dateInput.value;
+  const time = el.timeInput.value || '12:00';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Pick a valid date.');
+  if (`${date}T${time}` > nowStamp()) throw new Error('That is in the future.');
+  return `${date}T${time}`;
+}
+
 function save() {
   let sleepHours;
+  let stamp;
   try {
     sleepHours = readSleep();
+    stamp = readStamp();
   } catch (err) {
     showError(err.message);
     return;
   }
 
+  const mood = scales.mood.value;
+  const energy = scales.energy.value;
   const note = el.note.value.trim();
-  const values = {
-    mood: scales.mood.value,
-    energy: scales.energy.value,
-    // Stress was retired from the interface. Anything already recorded is
-    // carried through rather than wiped, so the decision stays reversible.
-    stress: getEntry(currentDate)?.stress ?? null,
-    sleep_hours: sleepHours,
-    note,
-  };
 
-  const isEmpty = values.mood === null && values.energy === null
-    && sleepHours === null && note === '';
-  if (isEmpty) {
+  if (mood === null && energy === null && note === '' && sleepHours === null) {
     showError('Nothing to save — fill in at least one field.');
     return;
   }
 
-  if (!upsertEntry(currentDate, values)) {
+  // Sleep is stored against the day even when the entry itself is empty, so
+  // recording only "I slept 7 hours" works.
+  if (!setSleep(dateOf(stamp), sleepHours)) {
     showError('Could not save. Private browsing can block storage.');
     return;
   }
 
+  if (mood !== null || energy !== null || note !== '') {
+    const id = saveEntry({ id: currentId, at: stamp, mood, energy, note });
+    if (!id) {
+      showError('Could not save. Private browsing can block storage.');
+      return;
+    }
+    currentId = id;
+  }
+
+  currentStamp = stamp;
   dirty = false;
-  el.saveBtn.textContent = 'Update';
-  el.dayStatus.textContent = 'Editing an entry you already saved.';
+  el.saveBtn.textContent = currentId ? 'Update' : 'Save';
+  el.deleteBtn.hidden = !currentId;
+  el.dayStatus.textContent = currentId
+    ? 'Editing an entry you already saved.'
+    : 'Sleep saved for this day.';
   el.feedback.textContent = 'Saved.';
   el.feedback.classList.remove('is-error');
+  renderDayEntries(dateOf(stamp));
   renderHistory();
-  // A first entry, or one saved a week after the last backup, changes whether
-  // the warning applies.
-  updateBackupWarning();
+}
+
+function deleteCurrent() {
+  if (!currentId) return;
+  if (!confirm(`Delete the entry from ${timeOf(currentStamp)} on ${dateOf(currentStamp)}?`)) return;
+  removeEntry(currentId);
+  const date = dateOf(currentStamp);
+  loadEntry(date === todayIso() ? nowStamp() : `${date}T12:00`, null);
+  el.feedback.textContent = 'Deleted.';
+  renderHistory();
 }
 
 /* ------------------------------------------------------------------ */
@@ -306,7 +502,8 @@ function summarise(entry) {
   const bits = [];
   if (entry.mood != null) bits.push(`Mood ${entry.mood}`);
   if (entry.energy != null) bits.push(`Energy ${entry.energy}`);
-  if (entry.sleep_hours != null) bits.push(`Sleep ${entry.sleep_hours} h`);
+  const hours = sleepOn(dateOf(entry.at));
+  if (hours != null) bits.push(`Slept ${hours} h`);
   return bits.length ? bits.join(' · ') : 'No ratings';
 }
 
@@ -329,17 +526,19 @@ function renderHistory() {
     const open = document.createElement('button');
     open.type = 'button';
     open.className = 'history-open';
-    open.setAttribute('aria-label', `Edit ${entry.date}`);
+    open.setAttribute('aria-label', `Edit entry from ${entry.at}`);
 
-    const date = document.createElement('span');
-    date.className = 'history-date';
-    date.textContent = shortDate(entry.date);
+    const when = document.createElement('span');
+    when.className = 'history-date';
+    // Time as well as date: with several entries a day the date alone no
+    // longer identifies which one this is.
+    when.textContent = `${shortDate(dateOf(entry.at))}  ${timeOf(entry.at)}`;
 
     const summary = document.createElement('span');
     summary.className = 'history-summary';
     summary.textContent = summarise(entry);
 
-    open.append(date, summary);
+    open.append(when, summary);
 
     if (entry.note) {
       const note = document.createElement('span');
@@ -352,19 +551,25 @@ function renderHistory() {
 
     open.addEventListener('click', () => {
       showView('today');
-      goTo(entry.date);
+      if (!confirmLeave()) return;
+      loadEntry(entry.at, entry.id);
     });
 
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'history-delete';
     remove.textContent = 'Delete';
-    remove.setAttribute('aria-label', `Delete ${entry.date}`);
+    remove.setAttribute('aria-label', `Delete entry from ${entry.at}`);
     remove.addEventListener('click', () => {
-      if (!confirm(`Delete the entry for ${entry.date}? This cannot be undone.`)) return;
-      removeEntry(entry.date);
+      if (!confirm(`Delete the entry from ${timeOf(entry.at)} on `
+        + `${shortDate(dateOf(entry.at))}? This cannot be undone.`)) return;
+      removeEntry(entry.id);
       renderHistory();
-      if (entry.date === currentDate) loadDate(currentDate);
+      if (entry.id === currentId) {
+        loadEntry(currentStamp, null);
+      } else {
+        renderDayEntries(dateOf(currentStamp));
+      }
     });
 
     item.append(open, remove);
@@ -397,11 +602,13 @@ function download(filename, text, mimeType) {
 const LAST_BACKUP_KEY = 'health-tracker.last-backup';
 
 function exportJson() {
+  const store = loadStore();
   const payload = {
     app: 'health-tracker',
-    version: 1,
+    version: 2,
     exported_at: new Date().toISOString(),
-    entries: allEntriesNewestFirst(),
+    entries: store.entries,
+    days: store.days,
   };
   download(
     `health-tracker-${todayIso()}.json`,
@@ -410,71 +617,7 @@ function exportJson() {
   );
   try {
     localStorage.setItem(LAST_BACKUP_KEY, todayIso());
-  } catch { /* the reminder simply stays visible */ }
-  updateBackupWarning();
-}
-
-function daysSinceLastBackup() {
-  // null means never backed up, which is treated as more urgent than overdue.
-  let last = null;
-  try {
-    last = localStorage.getItem(LAST_BACKUP_KEY);
-  } catch { return null; }
-  if (!last) return null;
-  return daysBetween(last, todayIso());
-}
-
-/* The app cannot make browser storage durable — iOS in particular may clear
- * it, and adding to the Home Screen reduces that risk without removing it.
- * What it can do is make sure nobody discovers the problem only after their
- * entries are gone. */
-function updateBackupWarning() {
-  const box = document.getElementById('backup-warning');
-  if (!box) return;
-
-  const count = Object.keys(loadAll()).length;
-  if (!count) { box.hidden = true; return; }
-
-  const since = daysSinceLastBackup();
-  if (since === null) {
-    box.textContent = `You have ${count} ${count === 1 ? 'day' : 'days'} logged and `
-      + 'have never saved a backup. Browser storage can be cleared without warning '
-      + '— especially on iPhone. Save one from the History tab.';
-    box.hidden = false;
-  } else if (since >= 7) {
-    box.textContent = `Your last backup was ${since} days ago. Save a fresh one `
-      + 'from the History tab.';
-    box.hidden = false;
-  } else {
-    box.hidden = true;
-  }
-}
-
-/* Persistent storage is a request, not a guarantee. Rather than asking
- * silently and never mentioning the answer, say plainly when the browser has
- * refused — that is exactly when backups are the only protection. */
-async function reportStorageDurability() {
-  const line = document.getElementById('storage-status');
-  if (!line || !navigator.storage || !navigator.storage.persisted) {
-    if (line) {
-      line.textContent = 'This browser gives no guarantee about keeping stored '
-        + 'data. Keep backups.';
-    }
-    return;
-  }
-  try {
-    let ok = await navigator.storage.persisted();
-    if (!ok && navigator.storage.persist) ok = await navigator.storage.persist();
-    line.textContent = ok
-      ? 'This browser has marked your entries as protected from automatic '
-        + 'clearing. Keep backups anyway — protection can still be revoked.'
-      : 'This browser has NOT protected your entries from automatic clearing. '
-        + 'They can disappear without warning. Backups are your only copy.';
-    line.classList.toggle('is-warning', !ok);
-  } catch {
-    line.textContent = 'Could not determine whether this browser protects your '
-      + 'entries. Keep backups.';
-  }
+  } catch { /* nothing to do */ }
 }
 
 function csvCell(value) {
@@ -485,21 +628,64 @@ function csvCell(value) {
 }
 
 function exportCsv() {
-  // Same column order as the desktop app's export, so the two are readable
-  // by the same tools.
-  const columns = ['date', 'mood', 'note', 'sleep_hours', 'energy', 'stress',
-    'created_at', 'updated_at'];
-  const rows = allEntriesNewestFirst().reverse();  // oldest first, like desktop
+  const store = loadStore();
+  const columns = ['date', 'time', 'mood', 'energy', 'sleep_hours', 'note'];
+  const rows = store.entries.slice().sort((x, y) => x.at.localeCompare(y.at));
   const lines = [columns.join(',')];
+
   for (const entry of rows) {
-    lines.push(columns.map((column) => csvCell(entry[column])).join(','));
+    const date = dateOf(entry.at);
+    lines.push([
+      csvCell(date),
+      csvCell(timeOf(entry.at)),
+      csvCell(entry.mood),
+      csvCell(entry.energy),
+      // Sleep belongs to the day; repeated here so each row stands alone in
+      // a spreadsheet, which is what people do with a CSV.
+      csvCell(sleepOn(date)),
+      csvCell(entry.note),
+    ].join(','));
   }
+
+  // Days with sleep recorded but no entry would otherwise vanish from the
+  // export entirely.
+  const covered = new Set(rows.map((e) => dateOf(e.at)));
+  for (const [date, day] of Object.entries(store.days)) {
+    if (!covered.has(date) && day.sleep_hours != null) {
+      lines.push([csvCell(date), '', '', '', csvCell(day.sleep_hours), ''].join(','));
+    }
+  }
+
   download(`health-tracker-${todayIso()}.csv`, lines.join('\n'), 'text/csv');
 }
 
 function showImportResult(message, isError) {
   importFeedback.textContent = message;
   importFeedback.classList.toggle('is-error', Boolean(isError));
+}
+
+/* Accepts both formats. Version 1 backups are sitting in people's Downloads
+ * folders right now, and a restore that rejected them would be worthless at
+ * exactly the moment it is needed. */
+function normaliseBackup(payload) {
+  if (Array.isArray(payload)) return migrateFromDateKeyed(keyByDate(payload));
+  if (!payload || typeof payload !== 'object') return null;
+
+  if (Array.isArray(payload.entries) && payload.version >= 2) {
+    return { version: 2, entries: payload.entries, days: payload.days || {} };
+  }
+  if (Array.isArray(payload.entries)) {
+    return migrateFromDateKeyed(keyByDate(payload.entries));   // version 1 export
+  }
+  return migrateFromDateKeyed(payload);                        // raw v1 map
+}
+
+function keyByDate(list) {
+  const map = {};
+  for (const item of list) {
+    if (item && typeof item.date === 'string') map[item.date] = item;
+  }
+  return map;
 }
 
 function importJson(file) {
@@ -515,54 +701,53 @@ function importJson(file) {
       return;
     }
 
-    const incoming = Array.isArray(payload) ? payload : payload.entries;
-    if (!Array.isArray(incoming)) {
+    const incoming = normaliseBackup(payload);
+    if (!incoming || !incoming.entries.length && !Object.keys(incoming.days).length) {
       showImportResult('That file has no entries in it.', true);
       return;
     }
 
-    const entries = loadAll();
+    const store = loadStore();
+    const seen = new Set(store.entries.map((e) => `${e.at}|${e.mood}|${e.energy}`));
     let added = 0;
-    let replaced = 0;
     let skipped = 0;
 
-    for (const entry of incoming) {
-      // Only take rows that look like entries; a stray file should not be
-      // able to write nonsense into storage.
-      if (!entry || typeof entry.date !== 'string'
-          || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
-        skipped++;
-        continue;
-      }
-      if (entries[entry.date]) replaced++; else added++;
-      entries[entry.date] = {
-        date: entry.date,
+    for (const entry of incoming.entries) {
+      if (!entry || typeof entry.at !== 'string') { skipped++; continue; }
+      // Restoring the same file twice should not double every entry, and
+      // there is no id to match on across devices.
+      const key = `${entry.at}|${entry.mood}|${entry.energy}`;
+      if (seen.has(key)) { skipped++; continue; }
+      seen.add(key);
+      store.entries.push({
+        id: newId(),
+        at: entry.at,
         mood: entry.mood ?? null,
         energy: entry.energy ?? null,
         stress: entry.stress ?? null,
-        sleep_hours: entry.sleep_hours ?? null,
         note: typeof entry.note === 'string' ? entry.note : '',
-        created_at: entry.created_at || new Date().toISOString(),
-        updated_at: entry.updated_at || new Date().toISOString(),
-      };
+      });
+      added++;
     }
 
-    if (replaced && !confirm(
-      `${replaced} day${replaced === 1 ? '' : 's'} already exist and will be `
-      + `overwritten by the backup. Continue?`)) {
-      showImportResult('Import cancelled — nothing changed.');
-      return;
+    let sleepDays = 0;
+    for (const [date, day] of Object.entries(incoming.days || {})) {
+      if (day && day.sleep_hours != null && store.days[date] == null) {
+        store.days[date] = { sleep_hours: day.sleep_hours };
+        sleepDays++;
+      }
     }
 
-    if (!saveAll(entries)) {
+    if (!saveStore(store)) {
       showImportResult('Could not save the imported entries.', true);
       return;
     }
 
     renderHistory();
-    loadDate(currentDate);
-    const parts = [`${added} added`, `${replaced} replaced`];
-    if (skipped) parts.push(`${skipped} skipped`);
+    loadEntry(currentStamp, currentId);
+    const parts = [`${added} added`];
+    if (sleepDays) parts.push(`${sleepDays} nights of sleep`);
+    if (skipped) parts.push(`${skipped} already present`);
     showImportResult(`Restored: ${parts.join(', ')}.`);
   };
 
@@ -570,16 +755,16 @@ function importJson(file) {
 }
 
 /* ------------------------------------------------------------------ */
-/* trends                                                              */
+/* trends                                                             */
 /* ------------------------------------------------------------------ */
 
-/* Drawn as SVG rather than canvas: it stays sharp on high-density phone
- * screens without any pixel-ratio juggling, and the elements can be styled
- * from CSS.
+/* The x axis is continuous time, not a row of days. Several entries in one
+ * day simply sit closer together, which is the honest picture: a morning and
+ * an evening rating are two moments, not one averaged "Tuesday".
  *
  * Two panels, because the units differ. Mood and energy share a 1-10 axis and
- * can be read against each other; sleep is in hours and gets its own.
- * A 7-hour night plotted on a 1-10 axis would sit off the top of the chart. */
+ * can be read against each other; sleep is in hours per night and gets its
+ * own. */
 
 const SERIES = {
   mood: { label: 'Mood', colour: '#2563eb' },
@@ -593,61 +778,90 @@ const chartHolder = document.getElementById('chart-holder');
 const trendsSummary = document.getElementById('trends-summary');
 const trendsEmpty = document.getElementById('trends-empty');
 
-let rangeDays = 30;                 // a number of days, or the string 'all'
+let rangeDays = 30;
+let smoothingDays = 0;          // 0 = plot every point as recorded
 const seriesOn = { mood: true, energy: true, sleep_hours: true };
 
 function svgEl(name, attrs = {}) {
   const node = document.createElementNS(SVG_NS, name);
-  for (const [key, value] of Object.entries(attrs)) {
-    node.setAttribute(key, String(value));
-  }
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
   return node;
 }
 
-function daysInRange() {
-  const today = todayIso();
-  let span = rangeDays;
+/* Local wall-clock to milliseconds. Parsing the string directly would make
+ * "2026-08-24T14:30" UTC in some engines and local in others. */
+function stampToMs(stamp) {
+  const [datePart, timePart = '12:00'] = stamp.split('T');
+  const [y, m, d] = datePart.split('-').map(Number);
+  const [hh, mm] = timePart.split(':').map(Number);
+  return new Date(y, m - 1, d, hh || 0, mm || 0).getTime();
+}
 
-  if (span === 'all') {
-    // From the very first entry to today. With a single day logged that is a
-    // one-day span, which is correct — "All" is allowed to be the shortest
-    // range, not just the longest.
-    const dates = Object.keys(loadAll()).sort();
-    if (!dates.length) return [today];
-    span = daysBetween(dates[0], today) + 1;
+const DAY_MS = 86400000;
+
+function rangeBounds() {
+  const end = Date.now();
+  if (rangeDays === 'all') {
+    const dates = loggedDates();
+    const sleepDates = Object.keys(loadStore().days);
+    const earliest = [...dates, ...sleepDates].sort()[0];
+    return [earliest ? stampToMs(`${earliest}T00:00`) : end - DAY_MS, end];
+  }
+  return [end - rangeDays * DAY_MS, end];
+}
+
+/* Points for one series: either every recorded value, or a trailing moving
+ * average sampled once a day. */
+function seriesPoints(key, fromMs, toMs) {
+  const raw = key === 'sleep_hours'
+    ? Object.entries(loadStore().days)
+      .filter(([, day]) => day && day.sleep_hours != null)
+      // Sleep is recorded for a night, so it is placed at a fixed hour rather
+      // than pretending to a precision it does not have.
+      .map(([date, day]) => ({ t: stampToMs(`${date}T08:00`), v: day.sleep_hours }))
+    : allEntriesOldestFirst()
+      .filter((e) => e[key] != null)
+      .map((e) => ({ t: stampToMs(e.at), v: e[key] }));
+
+  raw.sort((x, y) => x.t - y.t);
+
+  if (!smoothingDays) {
+    return raw.filter((p) => p.t >= fromMs && p.t <= toMs);
   }
 
+  // A trailing mean: each sample averages everything in the preceding window,
+  // so the line answers "how have things been lately", not "what was today".
+  const windowMs = smoothingDays * DAY_MS;
+
+  const sampleTimes = [];
+  for (let t = fromMs; t <= toMs; t += DAY_MS) sampleTimes.push(t);
+  // Always finish at the end of the range. Stepping a day at a time from the
+  // start leaves the last sample short of the present, so the line would stop
+  // before today's entries and quietly ignore the newest data.
+  if (sampleTimes[sampleTimes.length - 1] !== toMs) sampleTimes.push(toMs);
+
   const out = [];
-  for (let back = span - 1; back >= 0; back--) {
-    out.push(shiftIso(today, -back));
+  for (const t of sampleTimes) {
+    const inWindow = raw.filter((p) => p.t > t - windowMs && p.t <= t);
+    if (inWindow.length) {
+      out.push({ t, v: inWindow.reduce((s, p) => s + p.v, 0) / inWindow.length });
+    }
   }
   return out;
 }
 
-function daysBetween(fromIso, toIso_) {
-  const [fy, fm, fd] = fromIso.split('-').map(Number);
-  const [ty, tm, td] = toIso_.split('-').map(Number);
-  // UTC on both sides so a clock change between the dates cannot knock the
-  // division off by an hour and lose a day.
-  const from = Date.UTC(fy, fm - 1, fd);
-  const to = Date.UTC(ty, tm - 1, td);
-  return Math.round((to - from) / 86400000);
-}
-
 function renderTrends() {
   chartHolder.textContent = '';
-  const entries = loadAll();
+  const store = loadStore();
 
-  if (!Object.keys(entries).length) {
+  if (!store.entries.length && !Object.keys(store.days).length) {
     trendsSummary.textContent = '';
-    trendsEmpty.textContent = 'Nothing logged yet — save a day to see trends.';
+    trendsEmpty.textContent = 'Nothing logged yet — save an entry to see trends.';
     return;
   }
 
-  const days = daysInRange();
-  const inRange = days.map((d) => entries[d]).filter(Boolean);
-
-  renderSummary(days, inRange);
+  const [fromMs, toMs] = rangeBounds();
+  renderSummary(fromMs, toMs);
 
   const ratingKeys = ['mood', 'energy'].filter((k) => seriesOn[k]);
   const showSleep = seriesOn.sleep_hours;
@@ -658,40 +872,34 @@ function renderTrends() {
   }
   trendsEmpty.textContent = '';
 
-  // Measured rather than a fixed viewBox, so labels stay the same size on a
-  // phone and on a wide window instead of being scaled up with the drawing.
   const width = chartHolder.clientWidth || 340;
-  const bothPanels = ratingKeys.length && showSleep;
-  const ratingHeight = bothPanels ? 190 : 230;
-  const sleepHeight = bothPanels ? 150 : 230;
-  const totalHeight = (ratingKeys.length ? ratingHeight : 0)
-    + (showSleep ? sleepHeight : 0);
+  const both = ratingKeys.length && showSleep;
+  const ratingHeight = both ? 190 : 230;
+  const sleepHeight = both ? 150 : 230;
+  const totalHeight = (ratingKeys.length ? ratingHeight : 0) + (showSleep ? sleepHeight : 0);
 
   const svg = svgEl('svg', {
-    width: '100%',
-    height: totalHeight,
+    width: '100%', height: totalHeight,
     viewBox: `0 0 ${width} ${totalHeight}`,
-    role: 'img',
-    'aria-label': 'Chart of your logged values over time',
+    role: 'img', 'aria-label': 'Chart of your logged values over time',
   });
 
   let top = 0;
   if (ratingKeys.length) {
     drawPanel(svg, {
-      days, width, top, height: ratingHeight,
-      keys: ratingKeys, low: 1, high: RATING_MAX, tickStep: 3,
-      showDates: !showSleep, entries,
+      width, top, height: ratingHeight, keys: ratingKeys,
+      low: 1, high: RATING_MAX, tickStep: 3,
+      fromMs, toMs, showDates: !showSleep,
     });
     top += ratingHeight;
   }
   if (showSleep) {
-    const hours = days.map((d) => entries[d]?.sleep_hours)
-      .filter((v) => v != null);
+    const hours = seriesPoints('sleep_hours', fromMs, toMs).map((p) => p.v);
     const high = hours.length ? Math.max(10, Math.ceil(Math.max(...hours))) : 10;
     drawPanel(svg, {
-      days, width, top, height: sleepHeight,
-      keys: ['sleep_hours'], low: 0, high, tickStep: Math.max(2, Math.ceil(high / 4)),
-      showDates: true, entries,
+      width, top, height: sleepHeight, keys: ['sleep_hours'],
+      low: 0, high, tickStep: Math.max(2, Math.ceil(high / 4)),
+      fromMs, toMs, showDates: true,
     });
   }
 
@@ -699,26 +907,21 @@ function renderTrends() {
 }
 
 function drawPanel(svg, opts) {
-  const { days, width, top, height, keys, low, high, tickStep, showDates, entries } = opts;
-  const padLeft = 30;
-  const padRight = 10;
-  const padTop = 22;
+  const { width, top, height, keys, low, high, tickStep, fromMs, toMs, showDates } = opts;
+  const padLeft = 30, padRight = 10, padTop = 22;
   const padBottom = showDates ? 26 : 10;
 
   const plotW = Math.max(width - padLeft - padRight, 10);
   const plotH = Math.max(height - padTop - padBottom, 10);
   const baseY = top + padTop;
+  const span = Math.max(toMs - fromMs, 1);
 
-  const xFor = (i) => (days.length <= 1
-    ? padLeft
-    : padLeft + (i * plotW) / (days.length - 1));
-  const yFor = (value) => baseY + ((high - value) * plotH) / ((high - low) || 1);
+  const xFor = (ms) => padLeft + ((ms - fromMs) / span) * plotW;
+  const yFor = (v) => baseY + ((high - v) * plotH) / ((high - low) || 1);
 
   for (let value = low; value <= high; value += tickStep) {
     const y = yFor(value);
-    svg.appendChild(svgEl('line', {
-      x1: padLeft, y1: y, x2: padLeft + plotW, y2: y, class: 'grid',
-    }));
+    svg.appendChild(svgEl('line', { x1: padLeft, y1: y, x2: padLeft + plotW, y2: y, class: 'grid' }));
     const label = svgEl('text', { x: padLeft - 6, y: y + 4, class: 'tick', 'text-anchor': 'end' });
     label.textContent = String(value);
     svg.appendChild(label);
@@ -729,90 +932,93 @@ function drawPanel(svg, opts) {
   }));
 
   if (showDates) {
-    // Deduplicated: with a very short range the first, middle and last day
-    // can be the same date, which would stack labels on top of each other.
-    const marks = [...new Set([0, Math.floor(days.length / 2), days.length - 1])];
-    for (const i of marks) {
+    for (const [ms, anchor] of [[fromMs, 'start'], [(fromMs + toMs) / 2, 'middle'], [toMs, 'end']]) {
       const text = svgEl('text', {
-        x: xFor(i), y: baseY + plotH + 16, class: 'tick',
-        'text-anchor': i === 0 ? 'start' : i === days.length - 1 ? 'end' : 'middle',
+        x: xFor(ms), y: baseY + plotH + 16, class: 'tick', 'text-anchor': anchor,
       });
-      text.textContent = axisDate(days[i]);
+      text.textContent = axisDate(toIso(new Date(ms)));
       svg.appendChild(text);
     }
   }
 
   let legendX = padLeft;
   for (const key of keys) {
-    const { label, colour, hint } = SERIES[key];
-    drawSeries(svg, days.map((d) => entries[d]?.[key] ?? null), xFor, yFor, colour);
-
+    const { label, colour } = SERIES[key];
+    drawSeries(svg, seriesPoints(key, fromMs, toMs), xFor, yFor, colour);
     const text = svgEl('text', { x: legendX, y: top + 14, class: 'legend', fill: colour });
-    text.textContent = label + (hint || '');
+    text.textContent = label;
     svg.appendChild(text);
-    // Rough advance: measuring properly needs the node laid out, and this is
-    // close enough to keep the three labels apart.
-    legendX += (label.length + (hint ? hint.length : 0)) * 6.2 + 12;
+    legendX += label.length * 6.2 + 14;
   }
 }
 
-function drawSeries(svg, values, xFor, yFor, colour) {
-  // Consecutive days are joined solidly. Across a gap the two ends are joined
-  // with a dotted line instead: the shape stays readable, but the dots say
-  // plainly that nothing was recorded in between rather than implying a
-  // steady trend through days that were never logged.
-  let run = [];
-  const runs = [];
-  values.forEach((value, i) => {
-    if (value == null) {
-      if (run.length) runs.push(run);
-      run = [];
-    } else {
-      run.push([xFor(i), yFor(value)]);
-    }
-  });
-  if (run.length) runs.push(run);
+/* A gap means nothing was recorded, so the line is broken there and bridged
+ * with dots: the shape stays readable while a lapse in logging never reads as
+ * a steady trend. What counts as a gap depends on how often you log, so it
+ * scales with the range rather than being a fixed number of days. */
+function gapThreshold(fromMs, toMs) {
+  return Math.max(1.5 * DAY_MS, (toMs - fromMs) / 25);
+}
 
-  // Bridges are drawn first so the solid lines and dots sit on top of them.
+function drawSeries(svg, points, xFor, yFor, colour) {
+  if (!points.length) return;
+  const limit = gapThreshold(points[0].t, points[points.length - 1].t || points[0].t + DAY_MS);
+
+  const runs = [];
+  let run = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].t - points[i - 1].t > limit) { runs.push(run); run = []; }
+    run.push(points[i]);
+  }
+  runs.push(run);
+
   for (let i = 1; i < runs.length; i++) {
-    const [fromX, fromY] = runs[i - 1][runs[i - 1].length - 1];
-    const [toX, toY] = runs[i][0];
+    const from = runs[i - 1][runs[i - 1].length - 1];
+    const to = runs[i][0];
     svg.appendChild(svgEl('line', {
-      x1: fromX, y1: fromY, x2: toX, y2: toY,
-      stroke: colour, 'stroke-width': 1.5,
-      'stroke-dasharray': '2 4', 'stroke-linecap': 'round', opacity: 0.75,
+      x1: xFor(from.t), y1: yFor(from.v), x2: xFor(to.t), y2: yFor(to.v),
+      stroke: colour, 'stroke-width': 1.5, 'stroke-dasharray': '2 4',
+      'stroke-linecap': 'round', opacity: 0.75,
     }));
   }
 
-  for (const points of runs) {
-    if (points.length >= 2) {
+  for (const seg of runs) {
+    if (seg.length >= 2) {
       svg.appendChild(svgEl('polyline', {
-        points: points.map(([x, y]) => `${x},${y}`).join(' '),
+        points: seg.map((p) => `${xFor(p.t)},${yFor(p.v)}`).join(' '),
         fill: 'none', stroke: colour, 'stroke-width': 2,
         'stroke-linejoin': 'round', 'stroke-linecap': 'round',
       }));
     }
-    for (const [x, y] of points) {
-      svg.appendChild(svgEl('circle', { cx: x, cy: y, r: 3, fill: colour }));
+    // Individual readings are worth marking; a smoothed line is a
+    // calculation, and dotting every sample would just make it look noisy.
+    if (!smoothingDays) {
+      for (const p of seg) {
+        svg.appendChild(svgEl('circle', { cx: xFor(p.t), cy: yFor(p.v), r: 3, fill: colour }));
+      }
     }
   }
 }
 
-function renderSummary(days, inRange) {
-  const parts = [`${inRange.length} of ${days.length} days logged`];
+function renderSummary(fromMs, toMs) {
+  const entries = allEntriesOldestFirst()
+    .filter((e) => { const t = stampToMs(e.at); return t >= fromMs && t <= toMs; });
+  const days = new Set(entries.map((e) => dateOf(e.at)));
+
+  const parts = [`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`
+    + ` on ${days.size} ${days.size === 1 ? 'day' : 'days'}`];
 
   for (const key of ['mood', 'energy']) {
-    const values = inRange.map((e) => e[key]).filter((v) => v != null);
+    const values = entries.map((e) => e[key]).filter((v) => v != null);
     if (values.length) {
-      const mean = values.reduce((a, b) => a + b, 0) / values.length;
-      parts.push(`${SERIES[key].label} avg ${mean.toFixed(1)}`);
+      parts.push(`${SERIES[key].label} avg `
+        + `${(values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)}`);
     }
   }
 
-  const sleep = inRange.map((e) => e.sleep_hours).filter((v) => v != null);
+  const sleep = seriesPointsRaw('sleep_hours', fromMs, toMs);
   if (sleep.length) {
-    const mean = sleep.reduce((a, b) => a + b, 0) / sleep.length;
-    parts.push(`Sleep avg ${mean.toFixed(1)} h`);
+    parts.push(`Sleep avg ${(sleep.reduce((s, p) => s + p.v, 0) / sleep.length).toFixed(1)} h`);
   }
 
   const streak = currentStreak();
@@ -821,17 +1027,24 @@ function renderSummary(days, inRange) {
   trendsSummary.textContent = parts.join('  ·  ');
 }
 
+/* Averages in the summary describe what was recorded, so they always use the
+ * real values even when the chart is showing a smoothed line. */
+function seriesPointsRaw(key, fromMs, toMs) {
+  const saved = smoothingDays;
+  smoothingDays = 0;
+  const points = seriesPoints(key, fromMs, toMs);
+  smoothingDays = saved;
+  return points;
+}
+
 function currentStreak() {
   // Today may be missing without breaking the streak, so it does not read as
-  // broken simply because today has not been filled in yet.
-  const entries = loadAll();
+  // broken simply because today has not been logged yet.
+  const dates = new Set(loggedDates());
   let day = todayIso();
-  if (!entries[day]) day = shiftIso(day, -1);
+  if (!dates.has(day)) day = shiftIso(day, -1);
   let streak = 0;
-  while (entries[day]) {
-    streak++;
-    day = shiftIso(day, -1);
-  }
+  while (dates.has(day)) { streak++; day = shiftIso(day, -1); }
   return streak;
 }
 
@@ -841,14 +1054,20 @@ function currentStreak() {
 
 document.querySelectorAll('.scale').forEach(buildScale);
 
-el.prevDay.addEventListener('click', () => goTo(shiftIso(currentDate, -1)));
-el.nextDay.addEventListener('click', () => goTo(shiftIso(currentDate, 1)));
-el.todayBtn.addEventListener('click', () => goTo(todayIso()));
+el.prevDay.addEventListener('click', () => goToDate(shiftIso(dateOf(currentStamp), -1)));
+el.nextDay.addEventListener('click', () => goToDate(shiftIso(dateOf(currentStamp), 1)));
+// "Now" rather than "Today": it sets the time as well, ready for a new entry.
+el.nowBtn.addEventListener('click', () => {
+  if (!confirmLeave()) return;
+  loadEntry(nowStamp(), null);
+});
 el.dateInput.addEventListener('change', () => {
   // An emptied or half-typed date must not wipe the view.
-  if (el.dateInput.value) goTo(el.dateInput.value);
-  else el.dateInput.value = currentDate;
+  if (el.dateInput.value) goToDate(el.dateInput.value);
+  else el.dateInput.value = dateOf(currentStamp);
 });
+el.timeInput.addEventListener('input', markDirty);
+el.deleteBtn.addEventListener('click', deleteCurrent);
 
 el.sleep.addEventListener('input', markDirty);
 el.note.addEventListener('input', markDirty);
@@ -901,6 +1120,16 @@ document.querySelectorAll('#range-buttons .chip').forEach((chip) => {
   });
 });
 
+document.querySelectorAll('#smoothing-buttons .chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    smoothingDays = Number(chip.dataset.smooth);
+    document.querySelectorAll('#smoothing-buttons .chip').forEach((other) => {
+      other.classList.toggle('is-on', other === chip);
+    });
+    renderTrends();
+  });
+});
+
 document.querySelectorAll('#series-buttons .chip').forEach((chip) => {
   chip.addEventListener('click', () => {
     const key = chip.dataset.series;
@@ -932,7 +1161,7 @@ window.addEventListener('beforeunload', (event) => {
 });
 
 el.dateInput.max = todayIso();
-loadDate(todayIso());
+loadEntry(nowStamp(), null);
 
 /* ------------------------------------------------------------------ */
 /* installing, and keeping the data                                    */
@@ -1047,7 +1276,6 @@ if (isInstalled()) {
 
 // Asks the browser to protect this data, and reports what it answered.
 reportStorageDurability();
-updateBackupWarning();
 
 // Service workers need HTTPS (localhost excepted), so this does nothing when
 // testing over a plain-http LAN address and starts working once deployed.

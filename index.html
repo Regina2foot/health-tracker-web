@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Health">
 <!-- ?v= is bumped when these files change, so a cached copy can never win.
      Needed once deployed too, where caching is on by design. -->
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -40,8 +40,6 @@
   </div>
 </div>
 
-<p id="backup-warning" class="backup-warning" role="status" hidden></p>
-
 <nav class="tabs" role="tablist">
   <button role="tab" class="tab is-active" data-view="today" aria-selected="true">Today</button>
   <button role="tab" class="tab" data-view="history" aria-selected="false">History</button>
@@ -55,12 +53,17 @@
     <div class="datebar">
       <button id="prev-day" class="iconbtn" aria-label="Previous day">&larr;</button>
       <input type="date" id="date-input" aria-label="Date">
+      <input type="time" id="time-input" aria-label="Time">
       <button id="next-day" class="iconbtn" aria-label="Next day">&rarr;</button>
-      <button id="today-btn" class="textbtn">Today</button>
+      <button id="today-btn" class="textbtn">Now</button>
     </div>
 
     <p id="day-label" class="day-label"></p>
     <p id="day-status" class="status"></p>
+
+    <!-- Several entries a day is the point, so the others need to be
+         reachable without going to the History tab. -->
+    <div id="day-entries" class="day-entries" hidden></div>
 
     <form id="entry-form" novalidate>
 
@@ -84,16 +87,21 @@
           <span class="unit">hours</span>
           <button type="button" id="sleep-clear" class="textbtn">No answer</button>
         </div>
+        <p class="field-note">
+          Recorded once for the whole day, not per entry — it describes the
+          night, not the moment.
+        </p>
       </fieldset>
 
       <fieldset>
         <legend>Notes</legend>
         <textarea id="note-input" rows="4"
-                  placeholder="Anything worth remembering about today"></textarea>
+                  placeholder="Anything worth remembering"></textarea>
       </fieldset>
 
       <div class="actions">
         <button type="submit" id="save-btn" class="primary">Save</button>
+        <button type="button" id="delete-btn" class="textbtn" hidden>Delete</button>
         <span id="save-feedback" class="feedback" role="status" aria-live="polite"></span>
       </div>
 
@@ -146,6 +154,15 @@
       <button type="button" class="chip is-on" data-series="sleep_hours">Sleep</button>
     </div>
 
+    <div class="toolbar" id="smoothing-buttons">
+      <span class="toolbar-label">Show</span>
+      <button type="button" class="chip is-on" data-smooth="0">Every entry</button>
+      <button type="button" class="chip" data-smooth="7">7-day mean</button>
+      <button type="button" class="chip" data-smooth="30">30-day mean</button>
+      <button type="button" class="chip" data-smooth="90">90-day mean</button>
+      <button type="button" class="chip" data-smooth="365">1-year mean</button>
+    </div>
+
     <p id="trends-summary" class="trends-summary"></p>
     <div id="chart-holder" class="chart-holder"></div>
     <p id="trends-empty" class="placeholder"></p>
@@ -174,6 +191,6 @@
   </button>
 </footer>
 
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
