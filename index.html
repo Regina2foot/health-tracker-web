@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Health">
 <!-- ?v= is bumped when these files change, so a cached copy can never win.
      Needed once deployed too, where caching is on by design. -->
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -39,6 +39,8 @@
     <button type="button" id="install-dismiss" class="textbtn">Got it</button>
   </div>
 </div>
+
+<p id="backup-warning" class="backup-warning" role="status" hidden></p>
 
 <nav class="tabs" role="tablist">
   <button role="tab" class="tab is-active" data-view="today" aria-selected="true">Today</button>
@@ -108,10 +110,19 @@
     </div>
 
     <p class="notice">
-      Your entries live only in this browser. Clearing website data erases
-      them, and iPhones may do so on their own if you go a week without
-      opening the app — adding it to your Home Screen prevents that.
-      <strong>Save a backup now and then.</strong>
+      Your entries live only in this browser, and browsers can clear stored
+      data on their own — iPhones especially. Adding this to your Home Screen
+      makes that less likely but cannot rule it out.
+      <strong>A backup is the only copy that survives it.</strong>
+    </p>
+
+    <p id="storage-status" class="notice storage-status"></p>
+
+    <p class="notice">
+      <strong>On iPhone, always open it the same way.</strong> Safari and the
+      Home Screen icon can keep separate copies of your entries, so a day
+      logged in one may be missing from the other. If entries seem to have
+      vanished, check the other one before assuming they are gone.
     </p>
 
     <p id="import-feedback" class="feedback" role="status" aria-live="polite"></p>
@@ -147,8 +158,9 @@
     <strong>Add this to your Home Screen.</strong>
     On iPhone: tap Share, then “Add to Home Screen”. On Android: your browser’s
     menu — it may be labelled “Install app”, though nothing is installed on
-    your phone. You get an icon and your own window, and your entries stop
-    being at risk of the browser clearing them.
+    your phone. You get an icon and your own window, and your entries are
+    much less likely to be cleared by the browser — though not immune, so
+    keep backups either way.
   </p>
   <p class="fineprint">
     Nothing is downloaded onto your device and nothing is granted access to
@@ -162,6 +174,6 @@
   </button>
 </footer>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

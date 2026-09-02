@@ -290,6 +290,9 @@ function save() {
   el.feedback.textContent = 'Saved.';
   el.feedback.classList.remove('is-error');
   renderHistory();
+  // A first entry, or one saved a week after the last backup, changes whether
+  // the warning applies.
+  updateBackupWarning();
 }
 
 /* ------------------------------------------------------------------ */
@@ -391,6 +394,8 @@ function download(filename, text, mimeType) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const LAST_BACKUP_KEY = 'health-tracker.last-backup';
+
 function exportJson() {
   const payload = {
     app: 'health-tracker',
@@ -403,6 +408,73 @@ function exportJson() {
     JSON.stringify(payload, null, 2),
     'application/json',
   );
+  try {
+    localStorage.setItem(LAST_BACKUP_KEY, todayIso());
+  } catch { /* the reminder simply stays visible */ }
+  updateBackupWarning();
+}
+
+function daysSinceLastBackup() {
+  // null means never backed up, which is treated as more urgent than overdue.
+  let last = null;
+  try {
+    last = localStorage.getItem(LAST_BACKUP_KEY);
+  } catch { return null; }
+  if (!last) return null;
+  return daysBetween(last, todayIso());
+}
+
+/* The app cannot make browser storage durable — iOS in particular may clear
+ * it, and adding to the Home Screen reduces that risk without removing it.
+ * What it can do is make sure nobody discovers the problem only after their
+ * entries are gone. */
+function updateBackupWarning() {
+  const box = document.getElementById('backup-warning');
+  if (!box) return;
+
+  const count = Object.keys(loadAll()).length;
+  if (!count) { box.hidden = true; return; }
+
+  const since = daysSinceLastBackup();
+  if (since === null) {
+    box.textContent = `You have ${count} ${count === 1 ? 'day' : 'days'} logged and `
+      + 'have never saved a backup. Browser storage can be cleared without warning '
+      + '— especially on iPhone. Save one from the History tab.';
+    box.hidden = false;
+  } else if (since >= 7) {
+    box.textContent = `Your last backup was ${since} days ago. Save a fresh one `
+      + 'from the History tab.';
+    box.hidden = false;
+  } else {
+    box.hidden = true;
+  }
+}
+
+/* Persistent storage is a request, not a guarantee. Rather than asking
+ * silently and never mentioning the answer, say plainly when the browser has
+ * refused — that is exactly when backups are the only protection. */
+async function reportStorageDurability() {
+  const line = document.getElementById('storage-status');
+  if (!line || !navigator.storage || !navigator.storage.persisted) {
+    if (line) {
+      line.textContent = 'This browser gives no guarantee about keeping stored '
+        + 'data. Keep backups.';
+    }
+    return;
+  }
+  try {
+    let ok = await navigator.storage.persisted();
+    if (!ok && navigator.storage.persist) ok = await navigator.storage.persist();
+    line.textContent = ok
+      ? 'This browser has marked your entries as protected from automatic '
+        + 'clearing. Keep backups anyway — protection can still be revoked.'
+      : 'This browser has NOT protected your entries from automatic clearing. '
+        + 'They can disappear without warning. Backups are your only copy.';
+    line.classList.toggle('is-warning', !ok);
+  } catch {
+    line.textContent = 'Could not determine whether this browser protects your '
+      + 'entries. Keep backups.';
+  }
 }
 
 function csvCell(value) {
@@ -973,14 +1045,9 @@ if (isInstalled()) {
   footerNote.hidden = true;
 }
 
-// Asks the browser to treat this data as worth keeping. Chrome and Firefox
-// honour it; Safari largely grants it to installed apps. It is a request, not
-// a guarantee — which is why Save backup exists.
-if (navigator.storage && navigator.storage.persist) {
-  navigator.storage.persisted()
-    .then((already) => (already ? true : navigator.storage.persist()))
-    .catch(() => false);
-}
+// Asks the browser to protect this data, and reports what it answered.
+reportStorageDurability();
+updateBackupWarning();
 
 // Service workers need HTTPS (localhost excepted), so this does nothing when
 // testing over a plain-http LAN address and starts working once deployed.
